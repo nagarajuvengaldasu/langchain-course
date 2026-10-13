@@ -11,6 +11,9 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_tavily import TavilyCrawl, TavilyExtract, TavilyMap
+from pinecone import Pinecone, ServerlessSpec
+
+from consts import INDEX_NAME
 
 from logger import (Colors, log_error, log_header, log_info, log_success,
                     log_warning)
@@ -25,10 +28,21 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 # Anthropic has no embeddings API, so we use a local HuggingFace model
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-vectorstore = Chroma(persist_directory="chroma_db", embedding_function=embeddings)
-# vectorstore = PineconeVectorStore(
-#     index_name="langchain-docs-2025", embedding=embeddings
-# )
+#vectorstore = Chroma(persist_directory="chroma_db", embedding_function=embeddings)
+
+# Create the Pinecone index if it doesn't exist yet.
+# all-MiniLM-L6-v2 produces 384-dimensional vectors, so the index must match.
+pc = Pinecone()
+if not pc.has_index(INDEX_NAME):
+    log_info(f"Pinecone: Creating index '{INDEX_NAME}' (dim=384, cosine)")
+    pc.create_index(
+        name=INDEX_NAME,
+        dimension=384,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+    )
+
+vectorstore = PineconeVectorStore(index_name=INDEX_NAME, embedding=embeddings)
 tavily_extract = TavilyExtract()
 tavily_map = TavilyMap(max_depth=5, max_breadth=20, max_pages=1000)
 tavily_crawl = TavilyCrawl()
@@ -101,6 +115,12 @@ async def main():
     # Convert Tavily crawl results to LangChain Document objects
     all_docs = []
     for tavily_crawl_result_item in res["results"]:
+        # Some pages come back with no extracted content; skip them
+        if not tavily_crawl_result_item.get("raw_content"):
+            log_warning(
+                f"TavilyCrawl: Skipping {tavily_crawl_result_item['url']} (no content)"
+            )
+            continue
         log_info(
             f"TavilyCrawl: Successfully crawled {tavily_crawl_result_item['url']} from documentation site"
         )

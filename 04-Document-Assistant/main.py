@@ -1,6 +1,16 @@
 from typing import Any, Dict, List
 
 import streamlit as st
+from streamlit import runtime
+
+# Allow `python main.py` / `uv run main.py`: relaunch through `streamlit run`
+if __name__ == "__main__" and not runtime.exists():
+    import sys
+
+    from streamlit.web import cli as stcli
+
+    sys.argv = ["streamlit", "run", __file__, *sys.argv[1:]]
+    sys.exit(stcli.main())
 
 from backend.core import run_llm
 

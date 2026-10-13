@@ -5,18 +5,18 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain.messages import ToolMessage
 from langchain.tools import tool
-from langchain_pinecone import PineconeVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_pinecone import PineconeVectorStore
+
+from consts import INDEX_NAME
 
 load_dotenv()
 
 # Initialize embeddings (same as ingestion.py)
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-#Initialize vector store
-vectorstore = PineconeVectorStore(
-    index_name="langchain-docs-2026", embedding=embeddings
-)
+# Initialize vector store (same Pinecone index that ingestion.py writes to)
+vectorstore = PineconeVectorStore(index_name=INDEX_NAME, embedding=embeddings)
 # Initialize chat model
 model = init_chat_model("claude-sonnet-5-5", model_provider="anthropic")
 
@@ -67,7 +67,8 @@ def run_llm(query: str) -> Dict[str, Any]:
     response = agent.invoke({"messages": messages})
     
     # Extract the answer from the last AI message
-    answer = response["messages"][-1].content
+    # .text keeps only the text blocks (drops thinking blocks)
+    answer = str(response["messages"][-1].text)
     
     # Extract context documents from ToolMessage artifacts
     context_docs = []
